@@ -82,3 +82,59 @@ class WebSocketManager:
                 print(f"[WebSocket] Close error: {e}")
             finally:
                 self.ws = None
+
+    # utils/websocket_manager.py に追加
+    def receive_with_timeout(self, timeout=2.0):
+        """タイムアウト付きでメッセージを受信"""
+        import time
+        start_time = time.time()
+        
+        while time.time() - start_time < timeout:
+            try:
+                self.ws.settimeout(0.1)  # 100msのタイムアウト
+                raw = self.ws.recv()
+                if raw:
+                    return raw
+            except websocket._exceptions.WebSocketTimeoutException:
+                continue
+            except Exception as e:
+                print(f"[WebSocket] Receive error: {e}")
+                return None
+        
+        return None
+
+    def subscribe_once(self, topic, timeout=2.0):
+        """トピックを一度だけ購読してメッセージを取得"""
+        self.connect()
+        if not self.ws:
+            return None
+        
+        # IDを生成（一意性のため）
+        import uuid
+        sub_id = str(uuid.uuid4())
+        
+        try:
+            # Subscribe
+            self.send({
+                "op": "subscribe",
+                "id": sub_id,
+                "topic": topic
+            })
+            
+            # メッセージを待つ
+            raw = self.receive_with_timeout(timeout)
+            
+            # Unsubscribe
+            self.send({
+                "op": "unsubscribe",
+                "id": sub_id,
+                "topic": topic
+            })
+            
+            if raw:
+                return json.loads(raw)
+            
+        except Exception as e:
+            print(f"[WebSocket] Subscribe error: {e}")
+        
+        return None
